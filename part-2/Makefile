@@ -1,4 +1,4 @@
-BINARY := block_chain
+BINARY := block_chain.exe
 
 all: build run
 
@@ -9,5 +9,8 @@ build:
 run:
 	@echo "==> run"
 	@./$(BINARY)
+
+clean:
+	rm block_chain.exe
 
 .PHONY: build run
