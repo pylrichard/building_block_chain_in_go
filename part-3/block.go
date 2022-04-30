@@ -19,8 +19,8 @@ type Block struct {
 //Serialize 将Block序列化为一个字节数组
 func (b *Block) Serialize() []byte {
 	var result bytes.Buffer
-	encoder := gob.NewEncoder(&result)
 
+	encoder := gob.NewEncoder(&result)
 	err := encoder.Encode(b)
 	if err != nil {
 		log.Panic(err)
@@ -32,6 +32,7 @@ func (b *Block) Serialize() []byte {
 //DeserializeBlock 将字节数组反序列化为一个Block
 func DeserializeBlock(d []byte) *Block {
 	var b Block
+
 	decoder := gob.NewDecoder(bytes.NewReader(d))
 	err := decoder.Decode(&b)
 	if err != nil {
