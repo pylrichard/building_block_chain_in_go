@@ -17,13 +17,13 @@ func (cli *CLI) createBlockChain(addr string) {
 }
 
 func (cli *CLI) getBalance(addr string) {
-	bc := NewBlockChain(addr)
+	bc := NewBlockChain()
 	defer bc.db.Close()
 
 	balance := 0
-	utxos := bc.FindUTXO(addr)
+	utxs := bc.FindUTX(addr)
 
-	for _, out := range utxos {
+	for _, out := range utxs {
 		balance += out.Value
 	}
 

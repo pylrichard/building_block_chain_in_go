@@ -164,7 +164,7 @@ func CreateBlockChain(addr string) *BlockChain {
 //FindUnspentTransactions 找到未花费输出的交易
 func (bc *BlockChain) FindUnspentTransactions(addr string) []Transaction {
 	var unspentTxs []Transaction
-	spendTxs := make(map[string][]int)
+	spentTxs := make(map[string][]int)
 	bci := bc.Iterator()
 
 	for {
@@ -173,10 +173,77 @@ func (bc *BlockChain) FindUnspentTransactions(addr string) []Transaction {
 		for _, tx := range b.Transactions {
 			txId := hex.EncodeToString(tx.Id)
 
-		Output:
-			for outId, out := range tx.Out {
+		Outputs:
+			for outIdx, out := range tx.Out {
+				//如果交易输出被花费
+				if spentTxs[txId] != nil {
+					for _, spentOut := range spentTxs[txId] {
+						if spentOut == outIdx {
+							continue Outputs
+						}
+					}
+				}
 
+				//如果该交易输出可以被解锁，即可被花费
+				if out.CanBeUnlockedWith(addr) {
+					unspentTxs = append(unspentTxs, *tx)
+				}
+			}
+
+			if tx.IsCoinBase() == false {
+				for _, in := range tx.In {
+					if in.CanUnlockOutputWith(addr) {
+						txId := hex.EncodeToString(in.TxId)
+						spentTxs[txId] = append(spentTxs[txId], in.Out)
+					}
+				}
+			}
+		}
+
+		if len(b.PrevBlockHash) == 0 {
+			break
+		}
+	}
+
+	return unspentTxs
+}
+
+func (bc *BlockChain) FindUTX(addr string) []TxOutput {
+	var txOutputs []TxOutput
+	unspentTxs := bc.FindUnspentTransactions(addr)
+
+	for _, tx := range unspentTxs {
+		for _, out := range tx.Out {
+			if out.CanBeUnlockedWith(addr) {
+				txOutputs = append(txOutputs, out)
 			}
 		}
 	}
+
+	return txOutputs
+}
+
+//FindSpendableOutputs 从addr中找到至少amount的UTXO
+func (bc *BlockChain) FindSpendableOutputs(addr string, amount int) (int, map[string][]int) {
+	unspentOutputs := make(map[string][]int)
+	unspentTxs := bc.FindUnspentTransactions(addr)
+	accumulated := 0
+
+Work:
+	for _, tx := range unspentTxs {
+		txId := hex.EncodeToString(tx.Id)
+
+		for outIdx, out := range tx.Out {
+			if out.CanBeUnlockedWith(addr) && accumulated < amount {
+				accumulated += out.Value
+				unspentOutputs[txId] = append(unspentOutputs[txId], outIdx)
+
+				if accumulated >= amount {
+					break Work
+				}
+			}
+		}
+	}
+
+	return accumulated, unspentOutputs
 }
