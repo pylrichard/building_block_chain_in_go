@@ -35,7 +35,7 @@ func (cli *CLI) printUsage() {
 	fmt.Println("    get_balance -addr ADDRESS - Get balance of ADDRESS")
 	fmt.Println("    create_block_chain -addr ADDRESS - Create a block chain and send genesis block reward to ADDRESS")
 	fmt.Println("    print_chain - Print all the blocks of the block chain")
-	fmt.Println("    send -from FROM -to TO -amount AMOUNT - Send AMOUNT of coins from FROM address to TO")
+	fmt.Println("    send -from FROM -to TO -amount AMOUNT - Send AMOUNT of coins from FROM to TO")
 }
 
 func (cli *CLI) validateArgs() {
@@ -67,7 +67,7 @@ func (cli *CLI) printChain() {
 }
 
 func (cli *CLI) send(from, to string, amount int) {
-	bc := NewBlockChain(from)
+	bc := NewBlockChain()
 	defer bc.db.Close()
 
 	tx := NewUTXOTransaction(from, to, amount, bc)
