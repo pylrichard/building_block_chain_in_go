@@ -16,7 +16,7 @@ func (cli *CLI) printUsage() {
 	fmt.Println("  create_block_chain -address ADDRESS - Create a block_chain and send genesis block reward to ADDRESS")
 	fmt.Println("  create_wallet - Generates a new key-pair and saves it into the wallet file")
 	fmt.Println("  get_balance -address ADDRESS - Get balance of ADDRESS")
-	fmt.Println("  list_addresses - Lists all addresses from the wallet file")
+	fmt.Println("  list_addr - Lists all addresses from the wallet file")
 	fmt.Println("  print_chain - Print all the blocks of the block_chain")
 	fmt.Println("  reindex_utxo - Rebuilds the UTXO set")
 	fmt.Println("  send -from FROM -to TO -amount AMOUNT -mine - Send AMOUNT of coins from FROM to TO. Mine on the same node, when -mine is set.")
