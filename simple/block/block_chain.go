@@ -2,6 +2,7 @@ package block
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	bolt "go.etcd.io/bbolt"
@@ -27,6 +28,24 @@ func CreateChain(addr, nodeId string) *Chain {
 
 	var tip []byte
 	cbTx := transaction.NewCoinBaseTx(addr, genesisCoinBaseData)
+	genesis := NewGenesisBlock(cbTx)
+
+	db, err := bolt.Open(dbFileName, 0600, nil)
+	if err != nil {
+		log.Panic(err)
+	}
+	err = db.Update(func(tx *bolt.Tx) error {
+		tip = genesis.Hash
+
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+
+	bc := Chain{tip, db}
+
+	return &bc
 }
 
 func IsDbExists(dbFileName string) bool {
