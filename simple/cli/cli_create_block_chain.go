@@ -11,6 +11,6 @@ func (cli *CLI) createBlockChain(addr, nodeId string) {
 	if !wallet.ValidateAddr(addr) {
 		log.Panic("Error: addr is not valid")
 	}
-	bc := block.CreateChain(addr, nodeId)
+	bc := block.NewChainWithGenesis(addr, nodeId)
 	defer bc.Db.Close()
 }
