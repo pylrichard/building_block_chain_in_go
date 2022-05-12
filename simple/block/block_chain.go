@@ -98,8 +98,30 @@ func IsDbExists(dbFileName string) bool {
 	return true
 }
 
+func (bc *Chain) AddBlock(b *Block) {
+}
+
 func (bc *Chain) Iterator() *ChainIterator {
 	bci := &ChainIterator{bc.tip, bc.Db}
 
 	return bci
+}
+
+//GetBestHeight 返回最后一个块的高度
+func (bc *Chain) GetBestHeight() int {
+	var lastBlock Block
+
+	err := bc.Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(blocksBucket))
+		lastHash := b.Get([]byte("l"))
+		blockData := b.Get(lastHash)
+		lastBlock = *DeserializeBlock(blockData)
+
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return lastBlock.Height
 }
