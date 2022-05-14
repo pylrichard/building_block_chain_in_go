@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"github.com/pylrichard/building_block_chain_in_go/simple/utxo"
 	"io"
 	"io/ioutil"
 	"log"
@@ -143,6 +144,13 @@ func sendGetBlocks(addr string) {
 	sendData(addr, request)
 }
 
+func sendGetData(addr, kind string, id []byte) {
+	payload := gobEncode(GetData{nodeAddr, kind, id})
+	request := append(cmdToBytes("get_data"), payload...)
+
+	sendData(addr, request)
+}
+
 func sendVersion(addr string, bc *block.Chain) {
 	bestHeight := bc.GetBestHeight()
 	payload := gobEncode(Version{nodeVersion, bestHeight, nodeAddr})
@@ -168,6 +176,35 @@ func handleAddr(request []byte) {
 	requestBlocks()
 }
 
+func handleBlock(request []byte, bc *block.Chain) {
+	var buff bytes.Buffer
+	var payload Block
+
+	buff.Write(request[cmdLen:])
+	decoder := gob.NewDecoder(&buff)
+	err := decoder.Decode(&payload)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	data := payload.Block
+	block := block.DeserializeBlock(data)
+	fmt.Println("Received a new block!")
+	bc.AddBlock(block)
+
+	fmt.Printf("Added block %x\n", block.Hash)
+
+	if len(blocksInTransit) > 0 {
+		blockHash := blocksInTransit[0]
+		sendGetData(payload.AddrFrom, "block", blockHash)
+
+		blocksInTransit = blocksInTransit[1:]
+	} else {
+		set := utxo.Set{bc}
+		set.Reindex()
+	}
+}
+
 func handleConnection(conn net.Conn, bc *block.Chain) {
 	request, err := ioutil.ReadAll(conn)
 	if err != nil {
@@ -179,6 +216,8 @@ func handleConnection(conn net.Conn, bc *block.Chain) {
 	switch cmd {
 	case "addr":
 		handleAddr(request)
+	case "block":
+		handleBlock(request, bc)
 	default:
 		fmt.Println("Unknown command!")
 	}
