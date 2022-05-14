@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/gob"
+	"encoding/hex"
 	"fmt"
 	"github.com/pylrichard/building_block_chain_in_go/simple/utxo"
 	"io"
@@ -43,7 +44,7 @@ type GetData struct {
 	Id			[]byte
 }
 
-type Inv struct {
+type Inventory struct {
 	AddrFrom	string
 	Type		string
 	Items		[][]byte
@@ -205,6 +206,44 @@ func handleBlock(request []byte, bc *block.Chain) {
 	}
 }
 
+func handleInventory(request []byte, bc *block.Chain) {
+	var buff bytes.Buffer
+	var payload Inventory
+
+	buff.Write(request[cmdLen:])
+	decoder := gob.NewDecoder(&buff)
+	err := decoder.Decode(&payload)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	fmt.Printf("Received inventory with %d %s\n", len(payload.Items), payload.Type)
+
+	if payload.Type == "block" {
+		blocksInTransit = payload.Items
+
+		blockHash := payload.Items[0]
+		sendGetData(payload.AddrFrom, "block", blockHash)
+
+		var newInTransit [][]byte
+		for _, b := range blocksInTransit {
+			if bytes.Compare(b, blockHash) != 0 {
+				newInTransit = append(newInTransit, b)
+			}
+		}
+
+		blocksInTransit = newInTransit
+	}
+
+	if payload.Type == "tx" {
+		txId := payload.Items[0]
+
+		if memPool[hex.EncodeToString(txId)].Id == nil {
+			sendGetData(payload.AddrFrom, "tx", txId)
+		}
+	}
+}
+
 func handleConnection(conn net.Conn, bc *block.Chain) {
 	request, err := ioutil.ReadAll(conn)
 	if err != nil {
@@ -218,6 +257,8 @@ func handleConnection(conn net.Conn, bc *block.Chain) {
 		handleAddr(request)
 	case "block":
 		handleBlock(request, bc)
+	case "inventory":
+		handleInventory(request, bc)
 	default:
 		fmt.Println("Unknown command!")
 	}
