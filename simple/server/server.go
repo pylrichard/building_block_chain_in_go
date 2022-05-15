@@ -138,6 +138,14 @@ func sendData(addr string, data []byte) {
 	}
 }
 
+func sendInventory(addr, kind string, items [][]byte) {
+	inventory := Inventory{nodeAddr, kind, items}
+	payload := gobEncode(inventory)
+	request := append(cmdToBytes("inventory"), payload...)
+
+	sendData(addr, request)
+}
+
 func sendGetBlocks(addr string) {
 	payload := gobEncode(GetBlocks{nodeAddr})
 	request := append(cmdToBytes("get_blocks"), payload...)
@@ -189,11 +197,11 @@ func handleBlock(request []byte, bc *block.Chain) {
 	}
 
 	data := payload.Block
-	block := block.DeserializeBlock(data)
+	b := block.DeserializeBlock(data)
 	fmt.Println("Received a new block!")
-	bc.AddBlock(block)
+	bc.AddBlock(b)
 
-	fmt.Printf("Added block %x\n", block.Hash)
+	fmt.Printf("Added block %x\n", b.Hash)
 
 	if len(blocksInTransit) > 0 {
 		blockHash := blocksInTransit[0]
@@ -201,12 +209,12 @@ func handleBlock(request []byte, bc *block.Chain) {
 
 		blocksInTransit = blocksInTransit[1:]
 	} else {
-		set := utxo.Set{bc}
+		set := utxo.Set{Chain: bc}
 		set.Reindex()
 	}
 }
 
-func handleInventory(request []byte, bc *block.Chain) {
+func handleInventory(request []byte) {
 	var buff bytes.Buffer
 	var payload Inventory
 
@@ -244,6 +252,21 @@ func handleInventory(request []byte, bc *block.Chain) {
 	}
 }
 
+func handleGetBlocks(request []byte, bc *block.Chain) {
+	var buff bytes.Buffer
+	var payload GetBlocks
+
+	buff.Write(request[cmdLen:])
+	decoder := gob.NewDecoder(&buff)
+	err := decoder.Decode(&payload)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	blocks := bc.GetBlockHashes()
+	sendInventory(payload.AddrFrom, "block", blocks)
+}
+
 func handleConnection(conn net.Conn, bc *block.Chain) {
 	request, err := ioutil.ReadAll(conn)
 	if err != nil {
@@ -258,7 +281,9 @@ func handleConnection(conn net.Conn, bc *block.Chain) {
 	case "block":
 		handleBlock(request, bc)
 	case "inventory":
-		handleInventory(request, bc)
+		handleInventory(request)
+	case "get_blocks":
+		handleGetBlocks(request, bc)
 	default:
 		fmt.Println("Unknown command!")
 	}

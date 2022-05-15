@@ -125,3 +125,20 @@ func (bc *Chain) GetBestHeight() int {
 
 	return lastBlock.Height
 }
+
+//GetBlockHashes 返回链上所有区块的哈希列表
+func (bc *Chain) GetBlockHashes() [][]byte {
+	var blocks [][]byte
+	bci := bc.Iterator()
+
+	for {
+		b := bci.Next()
+		blocks = append(blocks, b.Hash)
+
+		if len(b.PrevBlockHash) == 0 {
+			break
+		}
+	}
+
+	return blocks
+}
