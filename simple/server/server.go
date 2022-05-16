@@ -114,6 +114,14 @@ func requestBlocks() {
 	}
 }
 
+func sendBlock(addr string, b *block.Block) {
+	data := Block{nodeAddr, b.Serialize()}
+	payload := gobEncode(data)
+	request := append(cmdToBytes("block"), payload...)
+
+	sendData(addr, request)
+}
+
 func sendData(addr string, data []byte) {
 	conn, err := net.Dial(protocol, addr)
 	if err != nil {
@@ -156,6 +164,14 @@ func sendGetBlocks(addr string) {
 func sendGetData(addr, kind string, id []byte) {
 	payload := gobEncode(GetData{nodeAddr, kind, id})
 	request := append(cmdToBytes("get_data"), payload...)
+
+	sendData(addr, request)
+}
+
+func sendTx(addr string, tx *transaction.Transaction) {
+	data := Tx{nodeAddr, tx.Serialize()}
+	payload := gobEncode(data)
+	request := append(cmdToBytes("tx"), payload...)
 
 	sendData(addr, request)
 }
@@ -267,6 +283,34 @@ func handleGetBlocks(request []byte, bc *block.Chain) {
 	sendInventory(payload.AddrFrom, "block", blocks)
 }
 
+func handleGetData(request []byte, bc *block.Chain) {
+	var buff bytes.Buffer
+	var payload GetData
+
+	buff.Write(request[cmdLen:])
+	decoder := gob.NewDecoder(&buff)
+	err := decoder.Decode(&payload)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	if payload.Type == "block" {
+		b, err := bc.GetBlock([]byte(payload.Id))
+		if err != nil {
+			return
+		}
+
+		sendBlock(payload.AddrFrom, &b)
+	}
+
+	if payload.Type == "tx" {
+		txId := hex.EncodeToString(payload.Id)
+		tx := memPool[txId]
+
+		sendTx(payload.AddrFrom, &tx)
+	}
+}
+
 func handleConnection(conn net.Conn, bc *block.Chain) {
 	request, err := ioutil.ReadAll(conn)
 	if err != nil {
@@ -284,6 +328,8 @@ func handleConnection(conn net.Conn, bc *block.Chain) {
 		handleInventory(request)
 	case "get_blocks":
 		handleGetBlocks(request, bc)
+	case "get_data":
+		handleGetData(request, bc)
 	default:
 		fmt.Println("Unknown command!")
 	}

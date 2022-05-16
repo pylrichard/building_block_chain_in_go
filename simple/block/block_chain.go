@@ -1,6 +1,7 @@
 package block
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -90,14 +91,6 @@ func NewChain(nodeId string) *Chain {
 	return &bc
 }
 
-func IsDbExists(dbFileName string) bool {
-	if _, err := os.Stat(dbFileName); os.IsNotExist(err) {
-		return false
-	}
-
-	return true
-}
-
 func (bc *Chain) AddBlock(b *Block) {
 }
 
@@ -126,6 +119,29 @@ func (bc *Chain) GetBestHeight() int {
 	return lastBlock.Height
 }
 
+//GetBlock 根据哈希找到区块
+func (bc *Chain) GetBlock(blockHash []byte) (Block, error) {
+	var block Block
+
+	err := bc.Db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(blocksBucket))
+
+		blockData := bucket.Get(blockHash)
+		if blockData == nil {
+			return errors.New("block is not found")
+		}
+
+		block = *DeserializeBlock(blockData)
+
+		return nil
+	})
+	if err != nil {
+		return block, err
+	}
+
+	return block, nil
+}
+
 //GetBlockHashes 返回链上所有区块的哈希列表
 func (bc *Chain) GetBlockHashes() [][]byte {
 	var blocks [][]byte
@@ -141,4 +157,12 @@ func (bc *Chain) GetBlockHashes() [][]byte {
 	}
 
 	return blocks
+}
+
+func IsDbExists(dbFileName string) bool {
+	if _, err := os.Stat(dbFileName); os.IsNotExist(err) {
+		return false
+	}
+
+	return true
 }
