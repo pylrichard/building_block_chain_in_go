@@ -5,7 +5,6 @@ import (
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
-	"github.com/pylrichard/building_block_chain_in_go/simple/utxo"
 	"io"
 	"io/ioutil"
 	"log"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/pylrichard/building_block_chain_in_go/simple/block"
 	"github.com/pylrichard/building_block_chain_in_go/simple/transaction"
+	"github.com/pylrichard/building_block_chain_in_go/simple/utxo"
 )
 
 const protocol = "tcp"
@@ -311,6 +311,71 @@ func handleGetData(request []byte, bc *block.Chain) {
 	}
 }
 
+func handleTx(request []byte, bc *block.Chain) {
+	var buff bytes.Buffer
+	var payload Tx
+
+	buff.Write(request[cmdLen:])
+	decoder := gob.NewDecoder(&buff)
+	err := decoder.Decode(&payload)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	txData := payload.Transaction
+	tx := transaction.DeserializeTransaction(txData)
+	memPool[hex.EncodeToString(tx.Id)] = tx
+
+	if nodeAddr == knownNodes[0] {
+		for _, node := range knownNodes {
+			if node != nodeAddr && node != payload.AddrFrom {
+				sendInventory(node, "tx", [][]byte{tx.Id})
+			}
+		}
+	} else {
+		if len(memPool) >= 2 && len(miningAddr) > 0 {
+		MineTransactions:
+			var txs []*transaction.Transaction
+
+			for id := range memPool {
+				tx := memPool[id]
+				if bc.VerifyTransaction(&tx) {
+					txs = append(txs, &tx)
+				}
+			}
+
+			if len(txs) == 0 {
+				fmt.Println("All transactions are invalid! Waiting for new one...")
+
+				return
+			}
+
+			cbTx := transaction.NewCoinBaseTx(miningAddr, "")
+			txs = append(txs, cbTx)
+			newBlock := bc.MineBlock(txs)
+			set := utxo.Set{Chain: bc}
+			set.Reindex()
+
+			fmt.Println("New block is mined!")
+
+			for _, tx := range txs {
+				txId := hex.EncodeToString(tx.Id)
+				delete(memPool, txId)
+			}
+
+			for _, node := range knownNodes {
+				if node != nodeAddr {
+					sendInventory(node, "block", [][]byte{newBlock.Hash})
+				}
+			}
+
+			if len(memPool) > 0 {
+				goto MineTransactions
+			}
+		}
+	}
+}
+
 func handleConnection(conn net.Conn, bc *block.Chain) {
 	request, err := ioutil.ReadAll(conn)
 	if err != nil {
@@ -330,6 +395,8 @@ func handleConnection(conn net.Conn, bc *block.Chain) {
 		handleGetBlocks(request, bc)
 	case "get_data":
 		handleGetData(request, bc)
+	case "tx":
+		handleTx(request, bc)
 	default:
 		fmt.Println("Unknown command!")
 	}

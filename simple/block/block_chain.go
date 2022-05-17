@@ -1,6 +1,8 @@
 package block
 
 import (
+	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -94,6 +96,26 @@ func NewChain(nodeId string) *Chain {
 func (bc *Chain) AddBlock(b *Block) {
 }
 
+func (bc *Chain) FindTransaction(Id []byte) (transaction.Transaction, error) {
+	bci := bc.Iterator()
+
+	for {
+		block := bci.Next()
+
+		for _, tx := range block.Transactions {
+			if bytes.Compare(tx.Id, Id) == 0 {
+				return *tx, nil
+			}
+		}
+
+		if len(block.PrevBlockHash) == 0 {
+			break
+		}
+	}
+
+	return transaction.Transaction{}, errors.New("transaction is not found")
+}
+
 func (bc *Chain) Iterator() *ChainIterator {
 	bci := &ChainIterator{bc.tip, bc.Db}
 
@@ -157,6 +179,74 @@ func (bc *Chain) GetBlockHashes() [][]byte {
 	}
 
 	return blocks
+}
+
+func (bc *Chain) MineBlock(transactions []*transaction.Transaction) *Block {
+	var lastHash []byte
+	var lastHeight int
+
+	for _, tx := range transactions {
+		if bc.VerifyTransaction(tx) != true {
+			log.Panic("Error: Invalid transaction")
+		}
+	}
+
+	err := bc.Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(blocksBucket))
+		lastHash = b.Get([]byte("l"))
+
+		blockData := b.Get(lastHash)
+		block := DeserializeBlock(blockData)
+
+		lastHeight = block.Height
+
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+
+	newBlock := NewBlock(transactions, lastHash, lastHeight + 1)
+
+	err = bc.Db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(blocksBucket))
+		err := b.Put(newBlock.Hash, newBlock.Serialize())
+		if err != nil {
+			log.Panic(err)
+		}
+
+		err = b.Put([]byte("l"), newBlock.Hash)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		bc.tip = newBlock.Hash
+
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return newBlock
+}
+
+//VerifyTransaction 验证Transaction的Input Signatures
+func (bc *Chain) VerifyTransaction(tx *transaction.Transaction) bool {
+	if tx.IsCoinBase() {
+		return true
+	}
+
+	prevTxs := make(map[string]transaction.Transaction)
+	for _, input := range tx.In {
+		prevTx, err := bc.FindTransaction(input.TxId)
+		if err != nil {
+			log.Panic(err)
+		}
+		prevTxs[hex.EncodeToString(prevTx.Id)] = prevTx
+	}
+
+	return tx.Verify(prevTxs)
 }
 
 func IsDbExists(dbFileName string) bool {
