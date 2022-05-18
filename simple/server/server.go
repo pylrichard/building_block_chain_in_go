@@ -114,6 +114,15 @@ func requestBlocks() {
 	}
 }
 
+func sendAddr(addr string) {
+	nodes := Addr{knownNodes}
+	nodes.AddrList = append(nodes.AddrList, nodeAddr)
+	payload := gobEncode(nodes)
+	request := append(cmdToBytes("addr"), payload...)
+
+	sendData(addr, request)
+}
+
 func sendBlock(addr string, b *block.Block) {
 	data := Block{nodeAddr, b.Serialize()}
 	payload := gobEncode(data)
@@ -376,6 +385,32 @@ func handleTx(request []byte, bc *block.Chain) {
 	}
 }
 
+func handleVersion(request []byte, bc *block.Chain) {
+	var buff bytes.Buffer
+	var payload Version
+
+	buff.Write(request[cmdLen:])
+	decoder := gob.NewDecoder(&buff)
+	err := decoder.Decode(&payload)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	h1 := bc.GetBestHeight()
+	h2 := payload.BestHeight
+
+	if h1 < h2 {
+		sendGetBlocks(payload.AddrFrom)
+	} else if h1 > h2 {
+		sendVersion(payload.AddrFrom, bc)
+	}
+
+	sendAddr(payload.AddrFrom)
+	if !isNodeKnown(payload.AddrFrom) {
+		knownNodes = append(knownNodes, payload.AddrFrom)
+	}
+}
+
 func handleConnection(conn net.Conn, bc *block.Chain) {
 	request, err := ioutil.ReadAll(conn)
 	if err != nil {
@@ -397,6 +432,8 @@ func handleConnection(conn net.Conn, bc *block.Chain) {
 		handleGetData(request, bc)
 	case "tx":
 		handleTx(request, bc)
+	case "version":
+		handleVersion(request, bc)
 	default:
 		fmt.Println("Unknown command!")
 	}
